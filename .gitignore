@@ -1,0 +1,6 @@
+i8008.asc
+i8008.bin
+i8008.json
+*.lst
+*.bin
+*.hex
