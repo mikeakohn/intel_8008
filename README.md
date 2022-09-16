@@ -3,6 +3,8 @@ Soft Core Intel 8008
 
 This is an Intel 8008 CPU implemented in an FPGA.
 
+https://www.mikekohn.net/micro/intel_8008_fpga.php
+
 Differences
 ===========
 
@@ -165,12 +167,13 @@ Memory Map
 
 This implementation of the Intel 8008 has 4 banks of memory.
 
-* Bank 0: RAM
-* Bank 1: ROM (currently a blink LED program from blink.asm)
+* Bank 0: RAM (256 bytes)
+* Bank 1: ROM (An LED blink program from blink.asm)
 * Bank 2: Peripherals
 * Bank 3: Empty
 
-The final implmentation will probably have 256 or 512 bytes of RAM.
 On start-up by default, the chip will load a program from a AT93C86A
-2kB EEPROM with a 3-Wire (SPI-like) interface.
+2kB EEPROM with a 3-Wire (SPI-like) interface but wll run the code
+from the ROM. To start the program loaded to RAM, the program select
+button needs to be held down while the chip is resetting.
 

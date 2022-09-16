@@ -1,3 +1,12 @@
+// Intel 8008 FPGA Soft Processor 
+//  Author: Michael Kohn
+//   Email: mike@mikekohn.net
+//     Web: https://www.mikekohn.net/
+//   Board: iceFUN iCE40 HX8K
+// License: MIT
+//
+// Copyright 2022 by Michael Kohn
+
 module alu
 (
   input [7:0] data_0,
