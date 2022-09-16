@@ -71,7 +71,7 @@ always @(posedge clk) begin
 end
 
 rom rom_0(
-  .address   (address[8:0]),
+  .address   (address[5:0]),
   .data_out  (rom_data_out)
 );
 
