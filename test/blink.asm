@@ -10,9 +10,7 @@ start:
   ;; d = value of LED.
   mvi d, 1
 main:
-  //mov M, d
-  mov a, d
-  out 8
+  mov M, d
 
   ;; Loop c to cause delay.
   mvi c, 0

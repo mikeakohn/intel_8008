@@ -12,6 +12,7 @@ A couple things are different from an actual Intel 8008.
 
 * PC is 16 bit (instead of 14 bit on the original chip).
 * Hardcoded ROM program or load program from an AT93C86A EEPROM.
+* in / out are mapped to 0x4000/0x4008.
 
 Registers
 =========
@@ -25,7 +26,7 @@ Registers
 * 6: L
 
 Internally there is an HL register which is simply { H, L }. The
-HL register is used as indirect memory access  when the assembly
+HL register is used as indirect memory access when the assembly
 language uses M instead of a register. When encoding instructions
 that have a source or destination as a register, M (aka [HL]) is
 encoded as register 7.
@@ -176,4 +177,10 @@ On start-up by default, the chip will load a program from a AT93C86A
 2kB EEPROM with a 3-Wire (SPI-like) interface but wll run the code
 from the ROM. To start the program loaded to RAM, the program select
 button needs to be held down while the chip is resetting.
+
+The peripherals area contain the following:
+
+* 0x8000: input from push button
+* 0x8008: ioport0 output (in my test case only 1 pin is connected)
+* 0x8009: MIDI note value (60-96) to play a tone on the speaker or 0 to stop
 
