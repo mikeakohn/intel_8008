@@ -7,6 +7,8 @@
 //
 // Copyright 2022 by Michael Kohn
 
+// This is a hardcoded program that blinks an external LED.
+
 module rom
 (
   input  [5:0] address,

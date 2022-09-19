@@ -7,6 +7,12 @@
 //
 // Copyright 2022 by Michael Kohn
 
+// This module reads from an AT93C86A EEPROM chip.
+// Data format: 110 AAAAAAAAAA DDDDDDDD where:
+// Binary 110 is 3 bits telling the EEPROM to go into "read" mode.
+// AAAAAAAAAA is 10 bits of the memory address being requested.
+// DDDDDDDD is 8 bits clocked out of the EEPROM being the data at that address.
+
 module eeprom
 (
   input [10:0] address,
@@ -36,14 +42,17 @@ parameter STATE_READ_DATA_0    = 4;
 parameter STATE_READ_DATA_1    = 5;
 parameter STATE_FINISH         = 6;
 
+// To run the AT93C86A at a speed slower than 2MHz, divide the clock down.
 always @(posedge raw_clk) begin
   clock_div <= clock_div + 1;
 end
 
+// State machine for reading the SPI-like EEPROM.
 always @(posedge clk) begin
   case (state)
     STATE_IDLE:
       begin
+        // Wait for the CPU to strobe to start a read.
         if (strobe) begin
           command[13:11] <= 3'b110;
           command[10:0] <= address;
@@ -60,6 +69,8 @@ always @(posedge clk) begin
       end
     STATE_SEND_ADDRESS_0:
       begin
+        // Clock out 3 bits of command and 10 bytes of
+        // address to the EEPROM.
         count <= count - 1;
         eeprom_di <= command[13];
         eeprom_clk <= 0;
@@ -85,6 +96,7 @@ always @(posedge clk) begin
       end
     STATE_READ_DATA_0:
       begin
+        // Clock in 8 bits of data from the EEPROM.
         count <= count - 1;
         data_out[7:1] <= data_out[6:0];
         eeprom_clk <= 1;
@@ -103,6 +115,8 @@ always @(posedge clk) begin
       end
     STATE_FINISH:
       begin
+        // Go back to IDLE state where the ready signal will tell the
+        // the CPU that data is available.
         eeprom_cs <= 0;
         eeprom_di <= 0;
         state <= STATE_IDLE;

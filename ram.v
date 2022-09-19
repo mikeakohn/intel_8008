@@ -7,6 +7,8 @@
 //
 // Copyright 2022 by Michael Kohn
 
+// This creates 256 bytes of RAM on the FPGA itself.
+
 module ram
 (
   input  [8:0] address,

@@ -25,6 +25,7 @@ module i8008
   input  button_0
 );
 
+// iceFUN 8x4 LEDs used for debugging.
 reg [7:0] leds_value;
 reg [3:0] column_value;
 
@@ -80,6 +81,7 @@ assign flags[2] = flag_sign;
 assign flags[1] = flag_carry;
 assign flags[0] = flag_zero;
 
+// Lower 6 its of the instruction.
 wire [5:0] opcode;
 assign opcode = instruction[5:0];
 
@@ -92,15 +94,17 @@ wire eeprom_ready;
 
 // Debug.
 //reg [7:0] debug_0 = 0;
-reg [7:0] debug_1 = 0;
+//reg [7:0] debug_1 = 0;
 //reg [7:0] debug_2 = 0;
 //reg [7:0] debug_3;
 
+// This block is simply a clock divider for the raw_clk.
 always @(posedge raw_clk) begin
   count <= count + 1;
   clock_div <= clock_div + 1;
 end
 
+// This block simply drives the 8x4 LEDs.
 always @(posedge raw_clk) begin
   case (count[9:7])
     //3'b000: begin column_value <= 4'b0111; leds_value <= ~instruction; end
@@ -207,6 +211,7 @@ parameter OP_CMP = 3'b111;
 parameter OP_MOV = 6'b000_000;
 parameter OP_HLT_1 = 6'b111_111;
 
+// This block is the main CPU instruction execute state machine.
 always @(posedge clk) begin
   case (state)
     STATE_RESET:
@@ -222,7 +227,6 @@ always @(posedge clk) begin
         instruction <= 0;
         delay_loop = 12000;
         eeprom_strobe <= 0;
-        // Set pc to 0x4000 for internal ROM.
         next_state <= STATE_DELAY_LOOP;
         //next_state <= STATE_FETCH_OP_0;
       end
@@ -263,15 +267,13 @@ always @(posedge clk) begin
               if (opcode[2:0] == 3'b000)
                 if (opcode[5:3] == 0)
                   next_state <= STATE_HALTED;
-                else begin
+                else
                   next_state <= STATE_EXECUTE;
-                end
               else if (opcode[2:0] == 3'b001)
                 if (opcode[5:3] == 0)
                   next_state <= STATE_HALTED;
-                else begin
+                else
                   next_state <= STATE_EXECUTE;
-                end
               else if (opcode[2:0] == 3'b010)
                 // Shift: RLC, RRC, RAL, RAR.
                 next_state <= STATE_EXECUTE;
@@ -383,7 +385,6 @@ always @(posedge clk) begin
       end
     STATE_FETCH_IM_0:
       begin
-        //reg_index <= opcode[5:3];
         mem_address <= pc;
         mem_write_enable <= 0;
         next_state <= STATE_FETCH_IM_1;
@@ -405,14 +406,16 @@ always @(posedge clk) begin
         case (instruction[7:6])
           2'b00:
             begin
-              // ALU with immediate.
               if (opcode[2:0] == 3'b000) begin
+                // Increment instruction (INR).
                 inc_result <= registers[opcode[5:3]] + 1;
                 next_state <= STATE_FINISH_INC;
               end else if (opcode[2:0] == 3'b001) begin
+                // Decrement instruction (DCR).
                 inc_result <= registers[opcode[5:3]] - 1;
                 next_state <= STATE_FINISH_INC;
               end else if (opcode[2:0] == 3'b010) begin
+                // Rotate instructions.
                 case (opcode[5:3])
                   3'b000:
                     begin
@@ -457,13 +460,13 @@ always @(posedge clk) begin
                 endcase
                 next_state <= STATE_FETCH_OP_0;
               end else if (opcode[2:0] == 3'b100) begin
-                // ALU with immediate.
+                // ALU with immediate value.
                 alu_data_0 <= registers[0];
                 alu_data_1 <= arg[7:0];
                 alu_command <= opcode[5:3];
                 next_state <= STATE_FINISH_ALU;
               end else if (opcode[2:0] == 3'b101) begin
-                // RST.
+                // RST (call subroutine at address (AAA000).
                 pc[2:0] <= 3'd0;
                 pc[5:3] <= opcode[5:3];
                 pc[15:6] <= 10'd0;
@@ -542,7 +545,7 @@ always @(posedge clk) begin
             end
           2'b10:
             begin
-              // ALU with registers.
+              // ALU instructions using registers.
               if (opcode[2:0] == 7) begin
                 alu_data_1 <= mem_data_out;
               end else begin
@@ -556,6 +559,7 @@ always @(posedge clk) begin
             end
           2'b11:
             begin
+              // MOV (register load instruction with registers or M).
               if (opcode[5:3] == 7) begin
                 mem_address <= register_hl;
                 mem_data_in <= registers[opcode[2:0]];
@@ -573,16 +577,19 @@ always @(posedge clk) begin
       end
     STATE_EXECUTE_WB:
       begin
+        // Finish writeback of result to memory.
         mem_write_enable <= 0;
         next_state <= STATE_FETCH_OP_0;
       end
     STATE_EXECUTE_RD:
       begin
+        // Finishing reading of memory into a register.
         registers[opcode[5:3]] <= mem_data_out;
         next_state <= STATE_FETCH_OP_0;
       end
     STATE_FINISH_INC:
       begin
+        // Finish INR / DCR (increment / decrement).
         registers[opcode[5:3]] <= inc_result[7:0];
         flag_zero <= inc_result[7:0] == 8'd0;
         flag_sign <= inc_result[7];
@@ -594,6 +601,7 @@ always @(posedge clk) begin
       end
     STATE_FINISH_ALU:
       begin
+        // Store ALU result into accumulator.
         if (opcode[5:3] != 7) registers[0] <= alu_result[7:0];
         flag_zero  <= alu_result[7:0] == 0;
         flag_carry <= alu_result[8];
@@ -632,6 +640,7 @@ always @(posedge clk) begin
       end
     STATE_EEPROM_START:
       begin
+        // Initialize values for reading from SPI-like EEPROM.
         if (eeprom_ready) begin
           eeprom_count <= 0;
           next_state <= STATE_EEPROM_READ;
@@ -639,6 +648,7 @@ always @(posedge clk) begin
       end
     STATE_EEPROM_READ:
       begin
+        // Set the next EEPROM address to read from and strobe.
         eeprom_address <= eeprom_count;
         mem_address <= eeprom_count;
         eeprom_strobe <= 1;
@@ -646,23 +656,24 @@ always @(posedge clk) begin
       end
     STATE_EEPROM_WAIT:
       begin
+        // Wait until 8 bits are clocked in.
         eeprom_strobe <= 0;
 
         if (eeprom_ready) begin
           mem_data_in <= eeprom_data_out;
           eeprom_count <= eeprom_count + 1;
           next_state <= STATE_EEPROM_WRITE;
-
-          debug_1 <= eeprom_data_out;
         end
       end
     STATE_EEPROM_WRITE:
       begin
+        // Write value read from EEPROM into memory.
         mem_write_enable <= 1;
         next_state <= STATE_EEPROM_DONE;
       end
     STATE_EEPROM_DONE:
       begin
+        // Finish writing and read next byte if needed.
         mem_write_enable <= 0;
 
         if (eeprom_count == 256)
@@ -673,6 +684,8 @@ always @(posedge clk) begin
   endcase
 end
 
+// On negative edge of clock, check reset and halt buttons and
+// change to next state of the CPU execution state machine.
 always @(negedge clk) begin
   if (!button_reset)
     state <= STATE_RESET;

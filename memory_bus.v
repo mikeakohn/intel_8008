@@ -7,6 +7,12 @@
 //
 // Copyright 2022 by Michael Kohn
 
+// The purpose of this module is to route reads and writes to the 4
+// different memory banks. Originally the idea was to have ROM and RAM
+// be SPI EEPROM (this may be changed in the future) so there would also
+// need a "ready" signal that would pause the CPU until the data can be
+// clocked in and out of of the SPI chips.
+
 module memory_bus
 (
   input [15:0] address,
@@ -29,17 +35,17 @@ wire [7:0] peripherals_data_out;
 reg [7:0] ram_data_in;
 reg [7:0] peripherals_data_in;
 
-//reg rom_strobe;
-//reg ram_strobe;
-//reg peripherals_strobe;
-
 reg ram_write_enable;
 reg peripherals_write_enable;
 
+// Based on the selected bank of memory (address[15:14]) select if
+// memory should read from ram.v, rom.v, peripherals.v or hardcoded 0.
 assign data_out = address[15] == 0 ?
   (address[14] == 0 ? ram_data_out : rom_data_out) :
   (address[14] == 0 ? peripherals_data_out : 0);
 
+// Based on the selected bank of memory, decided which module the
+// memory write should be sent to.
 always @(posedge clk) begin
   if (write_enable) begin
     case (address[15:14])
