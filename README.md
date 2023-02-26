@@ -60,7 +60,7 @@ RRMMM is equalent to address 0x8000 + (8 to 31).
 Jump / Call
 -----------
 
-All intructions are 3 byte and the 2 byte address is always absolute
+All instructions are 3 byte and the 2 byte address is always absolute
 instead of relative.
 
     01 xxx 100    jmp address (jump always)
