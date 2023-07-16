@@ -1,4 +1,4 @@
-// Intel 8008 FPGA Soft Processor 
+// Intel 8008 FPGA Soft Processor
 //  Author: Michael Kohn
 //   Email: mike@mikekohn.net
 //     Web: https://www.mikekohn.net/

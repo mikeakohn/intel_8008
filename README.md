@@ -1,7 +1,8 @@
 Soft Core Intel 8008
 ====================
 
-This is an Intel 8008 CPU implemented in an FPGA.
+This is an Intel 8008 CPU implemented in an FPGA. The board
+being used here is an iceFUN with a Lattice iCE40 HX8K FPGA.
 
 https://www.mikekohn.net/micro/intel_8008_fpga.php
 
