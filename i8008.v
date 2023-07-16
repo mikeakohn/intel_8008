@@ -702,6 +702,7 @@ memory_bus memory_bus_0(
   .write_enable (mem_write_enable),
   .clk          (clk),
   .raw_clk      (raw_clk),
+  .double_clk   (clock_div[6]),
   .speaker_p    (speaker_p),
   .speaker_m    (speaker_m),
   .ioport_0     (ioport_0),

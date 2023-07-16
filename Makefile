@@ -1,9 +1,10 @@
 
 PROGRAM=i8008
-SOURCE=$(PROGRAM).v alu.v eeprom.v memory_bus.v peripherals.v ram.v rom.v
+SOURCE=$(PROGRAM).v alu.v block_ram.v eeprom.v memory_bus.v peripherals.v ram.v rom.v
 
 default:
 	yosys -q -p "synth_ice40 -top $(PROGRAM) -json $(PROGRAM).json" $(SOURCE)
+	@echo "my mom"
 	nextpnr-ice40 -r --hx8k --json $(PROGRAM).json --package cb132 --asc $(PROGRAM).asc --opt-timing --pcf icefun.pcf
 	icepack $(PROGRAM).asc $(PROGRAM).bin
 
