@@ -105,7 +105,8 @@ ram ram_0(
   .data_in      (ram_data_in),
   .data_out     (ram_data_out),
   .write_enable (ram_write_enable),
-  .clk          (clk)
+  .clk          (clk),
+  .double_clk   (double_clk)
 );
 
 peripherals peripherals_0(

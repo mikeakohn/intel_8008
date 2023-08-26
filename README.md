@@ -169,10 +169,10 @@ Memory Map
 
 This implementation of the Intel 8008 has 4 banks of memory.
 
-* Bank 0: RAM (256 bytes)
+* Bank 0: RAM (1024 bytes) Implicit BlockRam.
 * Bank 1: ROM (An LED blink program from blink.asm)
 * Bank 2: Peripherals
-* Bank 3: Empty
+* Bank 3: Explicit BlockRam
 
 On start-up by default, the chip will load a program from a AT93C86A
 2kB EEPROM with a 3-Wire (SPI-like) interface but wll run the code

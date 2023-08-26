@@ -7,23 +7,29 @@
 //
 // Copyright 2022-2023 by Michael Kohn
 
-// This creates 256 bytes of RAM on the FPGA itself.
+// This creates 256 bytes of RAM on the FPGA itself. Written this
+// way makes it inferred by the IceStorm tools. It seems like it
+// only infers it to BlockRam when using double_clk, which based
+// on the timing chart in the Lattice documentation seems to make
+// sense.
 
 module ram
 (
   input  [8:0] address,
   input  [7:0] data_in,
-  output [7:0] data_out,
+  output reg [7:0] data_out,
   input write_enable,
-  input clk
+  input clk,
+  input double_clk
 );
 
-reg [7:0] storage [255:0];
-assign data_out = storage[address];
+reg [7:0] storage [1023:0];
 
-always @(posedge clk) begin
+always @(posedge double_clk) begin
   if (write_enable)
     storage[address] <= data_in;
+  else
+    data_out = storage[address];
 end
 
 endmodule
