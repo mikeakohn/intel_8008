@@ -18,6 +18,7 @@ module memory_bus
   input [15:0] address,
   input  [7:0] data_in,
   output [7:0] data_out,
+  input bus_enable,
   input write_enable,
   input clk,
   input raw_clk,
@@ -41,6 +42,9 @@ reg [7:0] block_ram_data_in;
 reg ram_write_enable;
 reg peripherals_write_enable;
 reg block_ram_write_enable;
+
+wire block_ram_chip_enable;
+assign block_ram_chip_enable = bus_enable & address[15] & address[14];
 
 // Based on the selected bank of memory (address[15:14]) select if
 // memory should read from ram.v, rom.v, peripherals.v or hardcoded 0.
@@ -122,6 +126,7 @@ block_ram block_ram_0(
   .address      (address[13:0]),
   .data_in      (block_ram_data_in),
   .data_out     (block_ram_data_out),
+  .chip_enable  (block_ram_chip_enable),
   .write_enable (block_ram_write_enable),
   .clk          (clk),
   .double_clk   (double_clk)

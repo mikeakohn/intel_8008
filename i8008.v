@@ -36,6 +36,7 @@ assign column = column_value;
 reg [15:0] mem_address = 0;
 reg [7:0] mem_data_in = 0;
 wire [7:0] mem_data_out;
+reg mem_bus_enable = 0;
 reg mem_write_enable = 0;
 
 // Clock.
@@ -248,12 +249,14 @@ always @(posedge clk) begin
       end
     STATE_FETCH_OP_0:
       begin
+        mem_bus_enable <= 1;
         mem_address <= pc;
         mem_write_enable <= 1'b0;
         next_state <= STATE_FETCH_OP_1;
       end
     STATE_FETCH_OP_1:
       begin
+        mem_bus_enable <= 0;
         instruction <= mem_data_out;
         next_state <= STATE_START;
         pc <= pc + 1;
@@ -361,36 +364,42 @@ always @(posedge clk) begin
       end
     STATE_FETCH_LO_0:
       begin
+        mem_bus_enable <= 1;
         mem_address <= pc;
         mem_write_enable <= 0;
         next_state <= STATE_FETCH_LO_1;
       end
     STATE_FETCH_LO_1:
       begin
+        mem_bus_enable <= 0;
         arg[7:0] <= mem_data_out;
         next_state <= STATE_FETCH_HI_0;
         pc <= pc + 1;
       end
     STATE_FETCH_HI_0:
       begin
+        mem_bus_enable <= 1;
         mem_address <= pc;
         mem_write_enable <= 0;
         next_state <= STATE_FETCH_HI_1;
       end
     STATE_FETCH_HI_1:
       begin
+        mem_bus_enable <= 0;
         arg[15:8] <= mem_data_out;
         next_state <= STATE_EXECUTE;
         pc <= pc + 1;
       end
     STATE_FETCH_IM_0:
       begin
+        mem_bus_enable <= 1;
         mem_address <= pc;
         mem_write_enable <= 0;
         next_state <= STATE_FETCH_IM_1;
       end
     STATE_FETCH_IM_1:
       begin
+        mem_bus_enable <= 0;
         arg[15:8] <= 0;
         arg[7:0] <= mem_data_out;
         next_state <= STATE_EXECUTE;
@@ -578,12 +587,14 @@ always @(posedge clk) begin
     STATE_EXECUTE_WB:
       begin
         // Finish writeback of result to memory.
+        mem_bus_enable <= 1;
         mem_write_enable <= 0;
         next_state <= STATE_FETCH_OP_0;
       end
     STATE_EXECUTE_RD:
       begin
         // Finishing reading of memory into a register.
+        mem_bus_enable <= 0;
         registers[opcode[5:3]] <= mem_data_out;
         next_state <= STATE_FETCH_OP_0;
       end
@@ -650,6 +661,7 @@ always @(posedge clk) begin
       begin
         // Set the next EEPROM address to read from and strobe.
         eeprom_address <= eeprom_count;
+        mem_bus_enable <= 1;
         mem_address <= eeprom_count;
         eeprom_strobe <= 1;
         next_state <= STATE_EEPROM_WAIT;
@@ -660,6 +672,7 @@ always @(posedge clk) begin
         eeprom_strobe <= 0;
 
         if (eeprom_ready) begin
+          mem_bus_enable <= 0;
           mem_data_in <= eeprom_data_out;
           eeprom_count <= eeprom_count + 1;
           next_state <= STATE_EEPROM_WRITE;
@@ -668,12 +681,14 @@ always @(posedge clk) begin
     STATE_EEPROM_WRITE:
       begin
         // Write value read from EEPROM into memory.
+        mem_bus_enable <= 1;
         mem_write_enable <= 1;
         next_state <= STATE_EEPROM_DONE;
       end
     STATE_EEPROM_DONE:
       begin
         // Finish writing and read next byte if needed.
+        mem_bus_enable <= 0;
         mem_write_enable <= 0;
 
         if (eeprom_count == 256)
@@ -699,10 +714,11 @@ memory_bus memory_bus_0(
   .address      (mem_address),
   .data_in      (mem_data_in),
   .data_out     (mem_data_out),
+  .bus_enable   (mem_bus_enable),
   .write_enable (mem_write_enable),
   .clk          (clk),
   .raw_clk      (raw_clk),
-  .double_clk   (clock_div[6]),
+  .double_clk   (clock_div[5]),
   .speaker_p    (speaker_p),
   .speaker_m    (speaker_m),
   .ioport_0     (ioport_0),

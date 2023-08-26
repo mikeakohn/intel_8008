@@ -18,7 +18,7 @@ module ram
   input clk
 );
 
-reg [7:0] storage [256:0];
+reg [7:0] storage [255:0];
 assign data_out = storage[address];
 
 always @(posedge clk) begin
