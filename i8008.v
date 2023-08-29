@@ -226,7 +226,7 @@ always @(posedge clk) begin
         mem_write_enable <= 0;
         mem_data_in <= 0;
         instruction <= 0;
-        delay_loop = 12000;
+        delay_loop <= 12000;
         eeprom_strobe <= 0;
         next_state <= STATE_DELAY_LOOP;
         //next_state <= STATE_FETCH_OP_0;
