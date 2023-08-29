@@ -19,6 +19,10 @@
 // double the speed of the main clock. Also, it seems the RE / WE signals
 // need to be reverse to work. It didn't work until I put ~ on them.
 
+// Warning: This appeared to be working... some small piece of code was
+// setting values and reading them back and they worked. But I switched
+// this to the bank that the implicit block RAM was and it glitched.
+
 module block_ram
 (
   input  [13:0] address,

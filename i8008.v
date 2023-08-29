@@ -42,7 +42,6 @@ reg mem_write_enable = 0;
 // Clock.
 reg [21:0] count = 0;
 reg [4:0] state = 0;
-reg [4:0] next_state;
 reg [19:0] clock_div;
 reg [14:0] delay_loop;
 wire clk;
@@ -214,500 +213,494 @@ parameter OP_HLT_1 = 6'b111_111;
 
 // This block is the main CPU instruction execute state machine.
 always @(posedge clk) begin
-  case (state)
-    STATE_RESET:
-      begin
-        stack_ptr <= 3'b000;
-        flag_zero <= 0;
-        flag_carry <= 0;
-        flag_sign <= 0;
-        flag_parity <= 0;
-        mem_address <= 0;
-        mem_write_enable <= 0;
-        mem_data_in <= 0;
-        instruction <= 0;
-        delay_loop <= 12000;
-        eeprom_strobe <= 0;
-        next_state <= STATE_DELAY_LOOP;
-        //next_state <= STATE_FETCH_OP_0;
-      end
-    STATE_DELAY_LOOP:
-      begin
-        // This is probably not needed. The chip starts up fine without it.
-        if (delay_loop == 0) begin
-
-          // If button is not pushed, start rom.v code otherwise use EEPROM.
-          if (button_program_select)
-            pc <= 16'h4000;
-          else
-            pc <= 0;
-
-          next_state <= STATE_EEPROM_START;
-        end else begin
-          delay_loop <= delay_loop - 1;
-        end
-      end
-    STATE_FETCH_OP_0:
-      begin
-        mem_bus_enable <= 1;
-        mem_address <= pc;
-        mem_write_enable <= 1'b0;
-        next_state <= STATE_FETCH_OP_1;
-      end
-    STATE_FETCH_OP_1:
-      begin
-        mem_bus_enable <= 0;
-        instruction <= mem_data_out;
-        next_state <= STATE_START;
-        pc <= pc + 1;
-      end
-    STATE_START:
-      begin
-        case (instruction[7:6])
-          2'b00:
-            begin
-              // Immediate instructions, inc, dec, halt.
-              if (opcode[2:0] == 3'b000)
-                if (opcode[5:3] == 0)
-                  next_state <= STATE_HALTED;
-                else
-                  next_state <= STATE_EXECUTE;
-              else if (opcode[2:0] == 3'b001)
-                if (opcode[5:3] == 0)
-                  next_state <= STATE_HALTED;
-                else
-                  next_state <= STATE_EXECUTE;
-              else if (opcode[2:0] == 3'b010)
-                // Shift: RLC, RRC, RAL, RAR.
-                next_state <= STATE_EXECUTE;
-              else if (opcode[2:0] == 3'b011)
-                begin
-                  case (opcode[5:3])
-                    OP_RNC: if (!flag_carry)  stack_ptr <= stack_ptr - 1;
-                    OP_RNZ: if (!flag_zero)   stack_ptr <= stack_ptr - 1;
-                    OP_RP:  if (!flag_sign)   stack_ptr <= stack_ptr - 1;
-                    OP_RPO: if (flag_parity)  stack_ptr <= stack_ptr - 1;
-                    OP_RC:  if (flag_carry)   stack_ptr <= stack_ptr - 1;
-                    OP_RZ:  if (flag_zero)    stack_ptr <= stack_ptr - 1;
-                    OP_RM:  if (flag_sign)    stack_ptr <= stack_ptr - 1;
-                    OP_RPE: if (!flag_parity) stack_ptr <= stack_ptr - 1;
-                  endcase
-
-                  // Return (conditional).
-                  next_state <= STATE_EXECUTE;
-                end
-              else if (opcode[2:0] == 3'b100)
-                // ALU with immediate.
-                next_state <= STATE_FETCH_IM_0;
-              else if (opcode[2:0] == 3'b101)
-                begin
-                  // RST.
-                  return_address <= pc + 2'd2;
-                  next_state <= STATE_EXECUTE;
-                end
-              else if (opcode[2:0] == 3'b110)
-                // MVI with immediate.
-                next_state <= STATE_FETCH_IM_0;
-              else if (opcode[2:0] == 3'b111)
-                begin
-                  // Return.
-                  stack_ptr <= stack_ptr - 1;
-                  next_state <= STATE_EXECUTE;
-                end
-              else
-                next_state <= STATE_ERROR;
-            end
-          2'b01:
-            begin
-              if (opcode[0] == 1) begin
-                if (opcode[5:4] == 0) begin
-                  // IN.
-                  mem_address <= { 13'b1000_0000_0000_0, opcode[3:1] };
-                  mem_write_enable <= 0;
-                end else begin
-                  // OUT.
-                  mem_address <= { 11'b1000_0000_000, opcode[5:1] };
-                  mem_data_in <= registers[0];
-                  mem_write_enable <= 1;
-                end
-
-                next_state <= STATE_EXECUTE;
-              end else begin
-                if (opcode[2:0] == 3'b010 || opcode[2:0] == 3'b110) begin
-                  // Call.
-                  return_address <= pc + 2'd2;
-                end
-
-                // Jump and call instructions.
-                next_state <= STATE_FETCH_LO_0;
-              end
-            end
-          2'b10:
-            begin
-              // ALU with registers.
-              if (opcode[2:0] == 7) begin
-                mem_address <= register_hl;
-                mem_write_enable <= 0;
-              end
-
-              next_state <= STATE_EXECUTE;
-            end
-          2'b11:
-            begin
-              //  MOV instructions or halt if source == 7 && dest == 7.
-              if (opcode == OP_HLT_1)
-                next_state <= STATE_HALTED;
-              else
-                next_state <= STATE_EXECUTE;
-            end
-        endcase
-      end
-    STATE_FETCH_LO_0:
-      begin
-        mem_bus_enable <= 1;
-        mem_address <= pc;
-        mem_write_enable <= 0;
-        next_state <= STATE_FETCH_LO_1;
-      end
-    STATE_FETCH_LO_1:
-      begin
-        mem_bus_enable <= 0;
-        arg[7:0] <= mem_data_out;
-        next_state <= STATE_FETCH_HI_0;
-        pc <= pc + 1;
-      end
-    STATE_FETCH_HI_0:
-      begin
-        mem_bus_enable <= 1;
-        mem_address <= pc;
-        mem_write_enable <= 0;
-        next_state <= STATE_FETCH_HI_1;
-      end
-    STATE_FETCH_HI_1:
-      begin
-        mem_bus_enable <= 0;
-        arg[15:8] <= mem_data_out;
-        next_state <= STATE_EXECUTE;
-        pc <= pc + 1;
-      end
-    STATE_FETCH_IM_0:
-      begin
-        mem_bus_enable <= 1;
-        mem_address <= pc;
-        mem_write_enable <= 0;
-        next_state <= STATE_FETCH_IM_1;
-      end
-    STATE_FETCH_IM_1:
-      begin
-        mem_bus_enable <= 0;
-        arg[15:8] <= 0;
-        arg[7:0] <= mem_data_out;
-        next_state <= STATE_EXECUTE;
-        pc <= pc + 1;
-      end
-    STATE_FETCH_SOURCE:
-      begin
-        arg[7:0] <= registers[opcode[5:3]];
-        next_state <= STATE_EXECUTE;
-      end
-    STATE_EXECUTE:
-      begin
-        case (instruction[7:6])
-          2'b00:
-            begin
-              if (opcode[2:0] == 3'b000) begin
-                // Increment instruction (INR).
-                inc_result <= registers[opcode[5:3]] + 1;
-                next_state <= STATE_FINISH_INC;
-              end else if (opcode[2:0] == 3'b001) begin
-                // Decrement instruction (DCR).
-                inc_result <= registers[opcode[5:3]] - 1;
-                next_state <= STATE_FINISH_INC;
-              end else if (opcode[2:0] == 3'b010) begin
-                // Rotate instructions.
-                case (opcode[5:3])
-                  3'b000:
-                    begin
-                      shift_result[7:1] <= registers[0][6:0];
-                      shift_carry <= registers[0][7];
-                      next_state <= STATE_FINISH_SHIFT;
-                    end
-                  3'b001:
-                    begin
-                      shift_result[6:0] <= registers[0][7:1];
-                      shift_carry <= registers[0][0];
-                      next_state <= STATE_FINISH_SHIFT;
-                    end
-                  3'b010:
-                    begin
-                      shift_result[7:1] <= registers[0][6:0];
-                      shift_result[0] <= flag_carry;
-                      shift_carry <= registers[0][7];
-                      next_state <= STATE_FINISH_SHIFT;
-                    end
-                  3'b011:
-                    begin
-                      shift_result[6:0] <= registers[0][7:1];
-                      shift_result[7] <= flag_carry;
-                      shift_carry <= registers[0][0];
-                      next_state <= STATE_FINISH_SHIFT;
-                    end
-                  default:
-                    next_state <= STATE_ERROR;
-                endcase
-              end else if (opcode[2:0] == 3'b011) begin
-                // Return (conditional).
-                case (opcode[5:3])
-                  OP_RNC: if (!flag_carry)  pc <= stack[stack_ptr];
-                  OP_RNZ: if (!flag_zero)   pc <= stack[stack_ptr];
-                  OP_RP:  if (!flag_sign)   pc <= stack[stack_ptr];
-                  OP_RPO: if (flag_parity)  pc <= stack[stack_ptr];
-                  OP_RC:  if (flag_carry)   pc <= stack[stack_ptr];
-                  OP_RZ:  if (flag_zero)    pc <= stack[stack_ptr];
-                  OP_RM:  if (flag_sign)    pc <= stack[stack_ptr];
-                  OP_RPE: if (!flag_parity) pc <= stack[stack_ptr];
-                endcase
-                next_state <= STATE_FETCH_OP_0;
-              end else if (opcode[2:0] == 3'b100) begin
-                // ALU with immediate value.
-                alu_data_0 <= registers[0];
-                alu_data_1 <= arg[7:0];
-                alu_command <= opcode[5:3];
-                next_state <= STATE_FINISH_ALU;
-              end else if (opcode[2:0] == 3'b101) begin
-                // RST (call subroutine at address (AAA000).
-                pc[2:0] <= 3'd0;
-                pc[5:3] <= opcode[5:3];
-                pc[15:6] <= 10'd0;
-                stack[stack_ptr] <= return_address;
-                next_state <= STATE_FINISH_CALL;
-              end else if (opcode[2:0] == 3'b110) begin
-                // MVI with immediate.
-                if (opcode[5:3] == 3'b111) begin
-                  mem_address <= register_hl;
-                  mem_data_in <= arg[7:0];
-                  mem_write_enable <= 1'b1;
-                  next_state <= STATE_EXECUTE_WB;
-                end else begin
-                  registers[opcode[5:3]] <= arg[7:0];
-                  next_state <= STATE_FETCH_OP_0;
-                end
-              end else if (opcode[2:0] == 3'b111) begin
-                // Return.
-                pc <= stack[stack_ptr];
-                next_state <= STATE_FETCH_OP_0;
-              end
-            end
-          2'b01:
-            begin
-              if (opcode[0] == 1) begin
-                if (opcode[5:4] == 0) begin
-                  // IN.
-                  registers[0] <= mem_data_out;
-                end else begin
-                  // OUT.
-                  mem_write_enable <= 0;
-                end
-
-                next_state <= STATE_FETCH_OP_0;
-              end else begin
-                if (opcode[2:0] == 3'b100) begin
-                  // Jump.
-                  pc <= arg;
-                  next_state <= STATE_FETCH_OP_0;
-                end else if (opcode[2:0] == 3'b110) begin
-                  // Call.
-                  pc <= arg;
-                  stack[stack_ptr] <= return_address;
-                  next_state <= STATE_FINISH_CALL;
-                end else if (opcode[2:0] == 3'b000) begin
-                  // Jump (conditional).
-                  case (opcode[5:3])
-                    OP_JNC: if (!flag_carry)  pc <= arg;
-                    OP_JNZ: if (!flag_zero)   pc <= arg;
-                    OP_JP:  if (!flag_sign)   pc <= arg;
-                    OP_JPO: if (flag_parity)  pc <= arg;
-                    OP_JC:  if (flag_carry)   pc <= arg;
-                    OP_JZ:  if (flag_zero)    pc <= arg;
-                    OP_JM:  if (flag_sign)    pc <= arg;
-                    OP_JPE: if (!flag_parity) pc <= arg;
-                  endcase
-                  next_state <= STATE_FETCH_OP_0;
-                end else if (opcode[2:0] == 3'b010) begin
-                  // Call (conditional).
-                  case (opcode[5:3])
-                    OP_CNC: if (!flag_carry)  pc <= arg;
-                    OP_CNZ: if (!flag_zero)   pc <= arg;
-                    OP_CP:  if (!flag_sign)   pc <= arg;
-                    OP_CPO: if (flag_parity)  pc <= arg;
-                    OP_CC:  if (flag_carry)   pc <= arg;
-                    OP_CZ:  if (flag_zero)    pc <= arg;
-                    OP_CM:  if (flag_sign)    pc <= arg;
-                    OP_CPE: if (!flag_parity) pc <= arg;
-                  endcase
-                  stack[stack_ptr] <= return_address;
-                  next_state <= STATE_FINISH_CALL;
-                end else begin
-                  next_state <= STATE_ERROR;
-                end
-              end
-            end
-          2'b10:
-            begin
-              // ALU instructions using registers.
-              if (opcode[2:0] == 7) begin
-                alu_data_1 <= mem_data_out;
-              end else begin
-                alu_data_1 <= opcode[2:0];
-              end
-
-              alu_data_0 <= registers[0];
-              alu_command <= opcode[5:3];
-
-              next_state <= STATE_FINISH_ALU;
-            end
-          2'b11:
-            begin
-              // MOV (register load instruction with registers or M).
-              if (opcode[5:3] == 7) begin
-                mem_address <= register_hl;
-                mem_data_in <= registers[opcode[2:0]];
-                mem_write_enable <= 1;
-                next_state <= STATE_EXECUTE_WB;
-              end else if (opcode[2:0] == 7) begin
-                mem_address <= register_hl;
-                next_state <= STATE_EXECUTE_RD;
-              end else begin
-                registers[opcode[5:3]] <= registers[opcode[2:0]];
-                next_state <= STATE_FETCH_OP_0;
-              end
-            end
-        endcase
-      end
-    STATE_EXECUTE_WB:
-      begin
-        // Finish writeback of result to memory.
-        mem_bus_enable <= 1;
-        mem_write_enable <= 0;
-        next_state <= STATE_FETCH_OP_0;
-      end
-    STATE_EXECUTE_RD:
-      begin
-        // Finishing reading of memory into a register.
-        mem_bus_enable <= 0;
-        registers[opcode[5:3]] <= mem_data_out;
-        next_state <= STATE_FETCH_OP_0;
-      end
-    STATE_FINISH_INC:
-      begin
-        // Finish INR / DCR (increment / decrement).
-        registers[opcode[5:3]] <= inc_result[7:0];
-        flag_zero <= inc_result[7:0] == 8'd0;
-        flag_sign <= inc_result[7];
-        flag_parity <=
-          inc_result[7] ^ inc_result[6] ^ inc_result[5] ^ inc_result[4] ^
-          inc_result[3] ^ inc_result[2] ^ inc_result[1] ^ inc_result[0] ^ 1'b1;
-
-        next_state <= STATE_FETCH_OP_0;
-      end
-    STATE_FINISH_ALU:
-      begin
-        // Store ALU result into accumulator.
-        if (opcode[5:3] != 7) registers[0] <= alu_result[7:0];
-        flag_zero  <= alu_result[7:0] == 0;
-        flag_carry <= alu_result[8];
-        flag_sign  <= alu_result[7];
-        flag_parity <=
-          alu_result[7] ^ alu_result[6] ^ alu_result[5] ^ alu_result[4] ^
-          alu_result[3] ^ alu_result[2] ^ alu_result[1] ^ alu_result[0] ^ 1'b1;
-
-        next_state <= STATE_FETCH_OP_0;
-      end
-    STATE_FINISH_SHIFT:
-      begin
-        // Only affects carry.
-        registers[0] <= shift_result;
-        flag_carry <= shift_carry;
-        next_state <= STATE_FETCH_OP_0;
-      end
-    STATE_FINISH_CALL:
-      begin
-        stack_ptr <= stack_ptr + 1;
-        next_state <= STATE_FETCH_OP_0;
-      end
-    STATE_HALTED:
-      begin
-        if (!button_halt)
-          next_state <= STATE_FETCH_OP_0;
-        else
-          next_state <= STATE_HALTED;
-
-        mem_write_enable <= 0;
-      end
-    STATE_ERROR:
-      begin
-        next_state <= STATE_ERROR;
-        mem_write_enable <= 0;
-      end
-    STATE_EEPROM_START:
-      begin
-        // Initialize values for reading from SPI-like EEPROM.
-        if (eeprom_ready) begin
-          eeprom_count <= 0;
-          next_state <= STATE_EEPROM_READ;
-        end
-      end
-    STATE_EEPROM_READ:
-      begin
-        // Set the next EEPROM address to read from and strobe.
-        eeprom_address <= eeprom_count;
-        mem_bus_enable <= 1;
-        mem_address <= eeprom_count;
-        eeprom_strobe <= 1;
-        next_state <= STATE_EEPROM_WAIT;
-      end
-    STATE_EEPROM_WAIT:
-      begin
-        // Wait until 8 bits are clocked in.
-        eeprom_strobe <= 0;
-
-        if (eeprom_ready) begin
-          mem_bus_enable <= 0;
-          mem_data_in <= eeprom_data_out;
-          eeprom_count <= eeprom_count + 1;
-          next_state <= STATE_EEPROM_WRITE;
-        end
-      end
-    STATE_EEPROM_WRITE:
-      begin
-        // Write value read from EEPROM into memory.
-        mem_bus_enable <= 1;
-        mem_write_enable <= 1;
-        next_state <= STATE_EEPROM_DONE;
-      end
-    STATE_EEPROM_DONE:
-      begin
-        // Finish writing and read next byte if needed.
-        mem_bus_enable <= 0;
-        mem_write_enable <= 0;
-
-        if (eeprom_count == 256)
-          next_state <= STATE_FETCH_OP_0;
-        else
-          next_state <= STATE_EEPROM_READ;
-      end
-  endcase
-end
-
-// On negative edge of clock, check reset and halt buttons and
-// change to next state of the CPU execution state machine.
-always @(negedge clk) begin
   if (!button_reset)
     state <= STATE_RESET;
   else if (!button_halt)
     state <= STATE_HALTED;
-  else
-    state <= next_state;
+  else begin
+    case (state)
+      STATE_RESET:
+        begin
+          stack_ptr <= 3'b000;
+          flag_zero <= 0;
+          flag_carry <= 0;
+          flag_sign <= 0;
+          flag_parity <= 0;
+          mem_address <= 0;
+          mem_write_enable <= 0;
+          mem_data_in <= 0;
+          instruction <= 0;
+          delay_loop <= 12000;
+          eeprom_strobe <= 0;
+          state <= STATE_DELAY_LOOP;
+        end
+      STATE_DELAY_LOOP:
+        begin
+          // This is probably not needed. The chip starts up fine without it.
+          if (delay_loop == 0) begin
+
+            // If button is not pushed, start rom.v code otherwise use EEPROM.
+            if (button_program_select)
+              pc <= 16'h4000;
+            else
+              pc <= 0;
+
+            state <= STATE_EEPROM_START;
+          end else begin
+            delay_loop <= delay_loop - 1;
+          end
+        end
+      STATE_FETCH_OP_0:
+        begin
+          mem_bus_enable <= 1;
+          mem_address <= pc;
+          mem_write_enable <= 1'b0;
+          state <= STATE_FETCH_OP_1;
+        end
+      STATE_FETCH_OP_1:
+        begin
+          mem_bus_enable <= 0;
+          instruction <= mem_data_out;
+          state <= STATE_START;
+          pc <= pc + 1;
+        end
+      STATE_START:
+        begin
+          case (instruction[7:6])
+            2'b00:
+              begin
+                // Immediate instructions, inc, dec, halt.
+                if (opcode[2:0] == 3'b000)
+                  if (opcode[5:3] == 0)
+                    state <= STATE_HALTED;
+                  else
+                    state <= STATE_EXECUTE;
+                else if (opcode[2:0] == 3'b001)
+                  if (opcode[5:3] == 0)
+                    state <= STATE_HALTED;
+                  else
+                    state <= STATE_EXECUTE;
+                else if (opcode[2:0] == 3'b010)
+                  // Shift: RLC, RRC, RAL, RAR.
+                  state <= STATE_EXECUTE;
+                else if (opcode[2:0] == 3'b011)
+                  begin
+                    case (opcode[5:3])
+                      OP_RNC: if (!flag_carry)  stack_ptr <= stack_ptr - 1;
+                      OP_RNZ: if (!flag_zero)   stack_ptr <= stack_ptr - 1;
+                      OP_RP:  if (!flag_sign)   stack_ptr <= stack_ptr - 1;
+                      OP_RPO: if (flag_parity)  stack_ptr <= stack_ptr - 1;
+                      OP_RC:  if (flag_carry)   stack_ptr <= stack_ptr - 1;
+                      OP_RZ:  if (flag_zero)    stack_ptr <= stack_ptr - 1;
+                      OP_RM:  if (flag_sign)    stack_ptr <= stack_ptr - 1;
+                      OP_RPE: if (!flag_parity) stack_ptr <= stack_ptr - 1;
+                    endcase
+
+                    // Return (conditional).
+                    state <= STATE_EXECUTE;
+                  end
+                else if (opcode[2:0] == 3'b100)
+                  // ALU with immediate.
+                  state <= STATE_FETCH_IM_0;
+                else if (opcode[2:0] == 3'b101)
+                  begin
+                    // RST.
+                    return_address <= pc + 2'd2;
+                    state <= STATE_EXECUTE;
+                  end
+                else if (opcode[2:0] == 3'b110)
+                  // MVI with immediate.
+                  state <= STATE_FETCH_IM_0;
+                else if (opcode[2:0] == 3'b111)
+                  begin
+                    // Return.
+                    stack_ptr <= stack_ptr - 1;
+                    state <= STATE_EXECUTE;
+                  end
+                else
+                  state <= STATE_ERROR;
+              end
+            2'b01:
+              begin
+                if (opcode[0] == 1) begin
+                  if (opcode[5:4] == 0) begin
+                    // IN.
+                    mem_address <= { 13'b1000_0000_0000_0, opcode[3:1] };
+                    mem_write_enable <= 0;
+                  end else begin
+                    // OUT.
+                    mem_address <= { 11'b1000_0000_000, opcode[5:1] };
+                    mem_data_in <= registers[0];
+                    mem_write_enable <= 1;
+                  end
+
+                  state <= STATE_EXECUTE;
+                end else begin
+                  if (opcode[2:0] == 3'b010 || opcode[2:0] == 3'b110) begin
+                    // Call.
+                    return_address <= pc + 2'd2;
+                  end
+
+                  // Jump and call instructions.
+                  state <= STATE_FETCH_LO_0;
+                end
+              end
+            2'b10:
+              begin
+                // ALU with registers.
+                if (opcode[2:0] == 7) begin
+                  mem_address <= register_hl;
+                  mem_write_enable <= 0;
+                end
+
+                state <= STATE_EXECUTE;
+              end
+            2'b11:
+              begin
+                //  MOV instructions or halt if source == 7 && dest == 7.
+                if (opcode == OP_HLT_1)
+                  state <= STATE_HALTED;
+                else
+                  state <= STATE_EXECUTE;
+              end
+          endcase
+        end
+      STATE_FETCH_LO_0:
+        begin
+          mem_bus_enable <= 1;
+          mem_address <= pc;
+          mem_write_enable <= 0;
+          state <= STATE_FETCH_LO_1;
+        end
+      STATE_FETCH_LO_1:
+        begin
+          mem_bus_enable <= 0;
+          arg[7:0] <= mem_data_out;
+          state <= STATE_FETCH_HI_0;
+          pc <= pc + 1;
+        end
+      STATE_FETCH_HI_0:
+        begin
+          mem_bus_enable <= 1;
+          mem_address <= pc;
+          mem_write_enable <= 0;
+          state <= STATE_FETCH_HI_1;
+        end
+      STATE_FETCH_HI_1:
+        begin
+          mem_bus_enable <= 0;
+          arg[15:8] <= mem_data_out;
+          state <= STATE_EXECUTE;
+          pc <= pc + 1;
+        end
+      STATE_FETCH_IM_0:
+        begin
+          mem_bus_enable <= 1;
+          mem_address <= pc;
+          mem_write_enable <= 0;
+          state <= STATE_FETCH_IM_1;
+        end
+      STATE_FETCH_IM_1:
+        begin
+          mem_bus_enable <= 0;
+          arg[15:8] <= 0;
+          arg[7:0] <= mem_data_out;
+          state <= STATE_EXECUTE;
+          pc <= pc + 1;
+        end
+      STATE_FETCH_SOURCE:
+        begin
+          arg[7:0] <= registers[opcode[5:3]];
+          state <= STATE_EXECUTE;
+        end
+      STATE_EXECUTE:
+        begin
+          case (instruction[7:6])
+            2'b00:
+              begin
+                if (opcode[2:0] == 3'b000) begin
+                  // Increment instruction (INR).
+                  inc_result <= registers[opcode[5:3]] + 1;
+                  state <= STATE_FINISH_INC;
+                end else if (opcode[2:0] == 3'b001) begin
+                  // Decrement instruction (DCR).
+                  inc_result <= registers[opcode[5:3]] - 1;
+                  state <= STATE_FINISH_INC;
+                end else if (opcode[2:0] == 3'b010) begin
+                  // Rotate instructions.
+                  case (opcode[5:3])
+                    3'b000:
+                      begin
+                        shift_result[7:1] <= registers[0][6:0];
+                        shift_carry <= registers[0][7];
+                        state <= STATE_FINISH_SHIFT;
+                      end
+                    3'b001:
+                      begin
+                        shift_result[6:0] <= registers[0][7:1];
+                        shift_carry <= registers[0][0];
+                        state <= STATE_FINISH_SHIFT;
+                      end
+                    3'b010:
+                      begin
+                        shift_result[7:1] <= registers[0][6:0];
+                        shift_result[0] <= flag_carry;
+                        shift_carry <= registers[0][7];
+                        state <= STATE_FINISH_SHIFT;
+                      end
+                    3'b011:
+                      begin
+                        shift_result[6:0] <= registers[0][7:1];
+                        shift_result[7] <= flag_carry;
+                        shift_carry <= registers[0][0];
+                        state <= STATE_FINISH_SHIFT;
+                      end
+                    default:
+                      state <= STATE_ERROR;
+                  endcase
+                end else if (opcode[2:0] == 3'b011) begin
+                  // Return (conditional).
+                  case (opcode[5:3])
+                    OP_RNC: if (!flag_carry)  pc <= stack[stack_ptr];
+                    OP_RNZ: if (!flag_zero)   pc <= stack[stack_ptr];
+                    OP_RP:  if (!flag_sign)   pc <= stack[stack_ptr];
+                    OP_RPO: if (flag_parity)  pc <= stack[stack_ptr];
+                    OP_RC:  if (flag_carry)   pc <= stack[stack_ptr];
+                    OP_RZ:  if (flag_zero)    pc <= stack[stack_ptr];
+                    OP_RM:  if (flag_sign)    pc <= stack[stack_ptr];
+                    OP_RPE: if (!flag_parity) pc <= stack[stack_ptr];
+                  endcase
+                  state <= STATE_FETCH_OP_0;
+                end else if (opcode[2:0] == 3'b100) begin
+                  // ALU with immediate value.
+                  alu_data_0 <= registers[0];
+                  alu_data_1 <= arg[7:0];
+                  alu_command <= opcode[5:3];
+                  state <= STATE_FINISH_ALU;
+                end else if (opcode[2:0] == 3'b101) begin
+                  // RST (call subroutine at address (AAA000).
+                  pc[2:0] <= 3'd0;
+                  pc[5:3] <= opcode[5:3];
+                  pc[15:6] <= 10'd0;
+                  stack[stack_ptr] <= return_address;
+                  state <= STATE_FINISH_CALL;
+                end else if (opcode[2:0] == 3'b110) begin
+                  // MVI with immediate.
+                  if (opcode[5:3] == 3'b111) begin
+                    mem_address <= register_hl;
+                    mem_data_in <= arg[7:0];
+                    mem_write_enable <= 1'b1;
+                    state <= STATE_EXECUTE_WB;
+                  end else begin
+                    registers[opcode[5:3]] <= arg[7:0];
+                    state <= STATE_FETCH_OP_0;
+                  end
+                end else if (opcode[2:0] == 3'b111) begin
+                  // Return.
+                  pc <= stack[stack_ptr];
+                  state <= STATE_FETCH_OP_0;
+                end
+              end
+            2'b01:
+              begin
+                if (opcode[0] == 1) begin
+                  if (opcode[5:4] == 0) begin
+                    // IN.
+                    registers[0] <= mem_data_out;
+                  end else begin
+                    // OUT.
+                    mem_write_enable <= 0;
+                  end
+
+                  state <= STATE_FETCH_OP_0;
+                end else begin
+                  if (opcode[2:0] == 3'b100) begin
+                    // Jump.
+                    pc <= arg;
+                    state <= STATE_FETCH_OP_0;
+                  end else if (opcode[2:0] == 3'b110) begin
+                    // Call.
+                    pc <= arg;
+                    stack[stack_ptr] <= return_address;
+                    state <= STATE_FINISH_CALL;
+                  end else if (opcode[2:0] == 3'b000) begin
+                    // Jump (conditional).
+                    case (opcode[5:3])
+                      OP_JNC: if (!flag_carry)  pc <= arg;
+                      OP_JNZ: if (!flag_zero)   pc <= arg;
+                      OP_JP:  if (!flag_sign)   pc <= arg;
+                      OP_JPO: if (flag_parity)  pc <= arg;
+                      OP_JC:  if (flag_carry)   pc <= arg;
+                      OP_JZ:  if (flag_zero)    pc <= arg;
+                      OP_JM:  if (flag_sign)    pc <= arg;
+                      OP_JPE: if (!flag_parity) pc <= arg;
+                    endcase
+                    state <= STATE_FETCH_OP_0;
+                  end else if (opcode[2:0] == 3'b010) begin
+                    // Call (conditional).
+                    case (opcode[5:3])
+                      OP_CNC: if (!flag_carry)  pc <= arg;
+                      OP_CNZ: if (!flag_zero)   pc <= arg;
+                      OP_CP:  if (!flag_sign)   pc <= arg;
+                      OP_CPO: if (flag_parity)  pc <= arg;
+                      OP_CC:  if (flag_carry)   pc <= arg;
+                      OP_CZ:  if (flag_zero)    pc <= arg;
+                      OP_CM:  if (flag_sign)    pc <= arg;
+                      OP_CPE: if (!flag_parity) pc <= arg;
+                    endcase
+                    stack[stack_ptr] <= return_address;
+                    state <= STATE_FINISH_CALL;
+                  end else begin
+                    state <= STATE_ERROR;
+                  end
+                end
+              end
+            2'b10:
+              begin
+                // ALU instructions using registers.
+                if (opcode[2:0] == 7) begin
+                  alu_data_1 <= mem_data_out;
+                end else begin
+                  alu_data_1 <= opcode[2:0];
+                end
+
+                alu_data_0 <= registers[0];
+                alu_command <= opcode[5:3];
+
+                state <= STATE_FINISH_ALU;
+              end
+            2'b11:
+              begin
+                // MOV (register load instruction with registers or M).
+                if (opcode[5:3] == 7) begin
+                  mem_address <= register_hl;
+                  mem_data_in <= registers[opcode[2:0]];
+                  mem_write_enable <= 1;
+                  state <= STATE_EXECUTE_WB;
+                end else if (opcode[2:0] == 7) begin
+                  mem_address <= register_hl;
+                  state <= STATE_EXECUTE_RD;
+                end else begin
+                  registers[opcode[5:3]] <= registers[opcode[2:0]];
+                  state <= STATE_FETCH_OP_0;
+                end
+              end
+          endcase
+        end
+      STATE_EXECUTE_WB:
+        begin
+          // Finish writeback of result to memory.
+          mem_bus_enable <= 1;
+          mem_write_enable <= 0;
+          state <= STATE_FETCH_OP_0;
+        end
+        STATE_EXECUTE_RD:
+        begin
+          // Finishing reading of memory into a register.
+          mem_bus_enable <= 0;
+          registers[opcode[5:3]] <= mem_data_out;
+          state <= STATE_FETCH_OP_0;
+        end
+      STATE_FINISH_INC:
+        begin
+          // Finish INR / DCR (increment / decrement).
+          registers[opcode[5:3]] <= inc_result[7:0];
+          flag_zero <= inc_result[7:0] == 8'd0;
+          flag_sign <= inc_result[7];
+          flag_parity <=
+            inc_result[7] ^ inc_result[6] ^ inc_result[5] ^ inc_result[4] ^
+            inc_result[3] ^ inc_result[2] ^ inc_result[1] ^ inc_result[0] ^ 1'b1;
+
+          state <= STATE_FETCH_OP_0;
+        end
+      STATE_FINISH_ALU:
+        begin
+          // Store ALU result into accumulator.
+          if (opcode[5:3] != 7) registers[0] <= alu_result[7:0];
+          flag_zero  <= alu_result[7:0] == 0;
+          flag_carry <= alu_result[8];
+          flag_sign  <= alu_result[7];
+          flag_parity <=
+            alu_result[7] ^ alu_result[6] ^ alu_result[5] ^ alu_result[4] ^
+            alu_result[3] ^ alu_result[2] ^ alu_result[1] ^ alu_result[0] ^ 1'b1;
+
+          state <= STATE_FETCH_OP_0;
+        end
+      STATE_FINISH_SHIFT:
+        begin
+          // Only affects carry.
+          registers[0] <= shift_result;
+          flag_carry <= shift_carry;
+          state <= STATE_FETCH_OP_0;
+        end
+      STATE_FINISH_CALL:
+        begin
+          stack_ptr <= stack_ptr + 1;
+          state <= STATE_FETCH_OP_0;
+        end
+      STATE_HALTED:
+        begin
+          if (!button_halt)
+            state <= STATE_FETCH_OP_0;
+          else
+            state <= STATE_HALTED;
+
+          mem_write_enable <= 0;
+        end
+      STATE_ERROR:
+        begin
+          state <= STATE_ERROR;
+          mem_write_enable <= 0;
+        end
+      STATE_EEPROM_START:
+        begin
+          // Initialize values for reading from SPI-like EEPROM.
+          if (eeprom_ready) begin
+            eeprom_count <= 0;
+            state <= STATE_EEPROM_READ;
+          end
+        end
+      STATE_EEPROM_READ:
+        begin
+          // Set the next EEPROM address to read from and strobe.
+          eeprom_address <= eeprom_count;
+          mem_bus_enable <= 1;
+          mem_address <= eeprom_count;
+          eeprom_strobe <= 1;
+          state <= STATE_EEPROM_WAIT;
+        end
+      STATE_EEPROM_WAIT:
+        begin
+          // Wait until 8 bits are clocked in.
+          eeprom_strobe <= 0;
+
+          if (eeprom_ready) begin
+            mem_bus_enable <= 0;
+            mem_data_in <= eeprom_data_out;
+            eeprom_count <= eeprom_count + 1;
+            state <= STATE_EEPROM_WRITE;
+          end
+        end
+      STATE_EEPROM_WRITE:
+        begin
+          // Write value read from EEPROM into memory.
+          mem_bus_enable <= 1;
+          mem_write_enable <= 1;
+          state <= STATE_EEPROM_DONE;
+        end
+      STATE_EEPROM_DONE:
+        begin
+          // Finish writing and read next byte if needed.
+          mem_bus_enable <= 0;
+          mem_write_enable <= 0;
+
+          if (eeprom_count == 256)
+            state <= STATE_FETCH_OP_0;
+          else
+            state <= STATE_EEPROM_READ;
+        end
+    endcase
+  end
 end
 
 memory_bus memory_bus_0(
