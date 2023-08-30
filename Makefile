@@ -1,6 +1,14 @@
 
 PROGRAM=i8008
-SOURCE=$(PROGRAM).v alu.v block_ram.v eeprom.v memory_bus.v peripherals.v ram.v rom.v
+SOURCE= \
+  src/$(PROGRAM).v \
+  src/alu.v \
+  src/block_ram.v \
+  src/eeprom.v \
+  src/memory_bus.v \
+  src/peripherals.v \
+  src/ram.v \
+  src/rom.v
 
 default:
 	yosys -q -p "synth_ice40 -top $(PROGRAM) -json $(PROGRAM).json" $(SOURCE)
