@@ -165,7 +165,7 @@ Only carry flag is affected.
     00 011 010    rar    (rotate A right, shift into bit 7: carry)
 
 Memory Map
-----------
+==========
 
 This implementation of the Intel 8008 has 4 banks of memory.
 

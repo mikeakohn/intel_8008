@@ -18,6 +18,10 @@ default:
 program:
 	iceFUNprog $(PROGRAM).bin
 
+blink:
+	naken_asm -l -type bin -o rom.bin test/blink.asm
+	python3 tools/bin2txt.py rom.bin > rom.txt
+
 .PHONY: test
 test:
 	naken_asm -l -type bin -o blink.bin test/blink.asm

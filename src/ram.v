@@ -5,7 +5,7 @@
 //   Board: iceFUN iCE40 HX8K
 // License: MIT
 //
-// Copyright 2022-2023 by Michael Kohn
+// Copyright 2022-2024 by Michael Kohn
 
 // This creates 256 bytes of RAM on the FPGA itself. Written this
 // way makes it inferred by the IceStorm tools. It seems like it
@@ -15,7 +15,7 @@
 
 module ram
 (
-  input  [8:0] address,
+  input  [11:0] address,
   input  [7:0] data_in,
   output reg [7:0] data_out,
   input write_enable,
@@ -23,7 +23,7 @@ module ram
   input double_clk
 );
 
-reg [7:0] storage [1023:0];
+reg [7:0] storage [4095:0];
 
 always @(posedge double_clk) begin
   if (write_enable)

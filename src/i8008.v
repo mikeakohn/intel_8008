@@ -5,7 +5,7 @@
 //   Board: iceFUN iCE40 HX8K
 // License: MIT
 //
-// Copyright 2022 by Michael Kohn
+// Copyright 2022-2024 by Michael Kohn
 
 module i8008
 (
@@ -489,7 +489,7 @@ always @(posedge clk) begin
                   if (opcode[5:3] == 3'b111) begin
                     mem_address <= register_hl;
                     mem_data_in <= arg[7:0];
-                    mem_write_enable <= 1'b1;
+                    mem_write_enable <= 1;
                     state <= STATE_EXECUTE_WB;
                   end else begin
                     registers[opcode[5:3]] <= arg[7:0];
@@ -594,7 +594,7 @@ always @(posedge clk) begin
           mem_write_enable <= 0;
           state <= STATE_FETCH_OP_0;
         end
-        STATE_EXECUTE_RD:
+      STATE_EXECUTE_RD:
         begin
           // Finishing reading of memory into a register.
           mem_bus_enable <= 0;
