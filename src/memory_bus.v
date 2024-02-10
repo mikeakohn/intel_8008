@@ -35,65 +35,19 @@ wire [7:0] ram_data_out;
 wire [7:0] peripherals_data_out;
 wire [7:0] block_ram_data_out;
 
-reg [7:0] ram_data_in;
-reg [7:0] peripherals_data_in;
-reg [7:0] block_ram_data_in;
+wire ram_write_enable;
+wire peripherals_write_enable;
+wire block_ram_write_enable;
 
-reg ram_write_enable;
-reg peripherals_write_enable;
-reg block_ram_write_enable;
-
-wire block_ram_chip_enable;
-assign block_ram_chip_enable = bus_enable & address[15] & address[14];
+assign ram_write_enable = (address[15:14] == 2'b00) && write_enable;
+assign peripherals_write_enable = (address[15:14] == 2'b10) && write_enable;
+assign block_ram_write_enable = (address[15:14] == 2'b11) && write_enable;
 
 // Based on the selected bank of memory (address[15:14]) select if
 // memory should read from ram.v, rom.v, peripherals.v or hardcoded 0.
 assign data_out = address[15] == 0 ?
   (address[14] == 0 ? ram_data_out         : rom_data_out) :
   (address[14] == 0 ? peripherals_data_out : block_ram_data_out);
-
-// Based on the selected bank of memory, decided which module the
-// memory write should be sent to.
-always @(posedge clk) begin
-  if (write_enable) begin
-    case (address[15:14])
-      2'b00:
-        begin
-          ram_data_in <= data_in;
-
-          ram_write_enable <= 1;
-          peripherals_write_enable <= 0;
-          block_ram_write_enable <= 0;
-        end
-      2'b01:
-        begin
-          ram_write_enable <= 0;
-          peripherals_write_enable <= 0;
-          block_ram_write_enable <= 0;
-        end
-      2'b10:
-        begin
-          peripherals_data_in <= data_in;
-
-          ram_write_enable <= 0;
-          peripherals_write_enable <= 1;
-          block_ram_write_enable <= 0;
-        end
-      2'b11:
-        begin
-          block_ram_data_in <= data_in;
-
-          ram_write_enable <= 0;
-          peripherals_write_enable <= 0;
-          block_ram_write_enable <= 1;
-        end
-    endcase
-  end else begin
-    ram_write_enable <= 0;
-    peripherals_write_enable <= 0;
-    block_ram_write_enable <= 0;
-  end
-end
 
 rom rom_0(
   .address   (address[11:0]),
@@ -103,7 +57,7 @@ rom rom_0(
 
 ram ram_0(
   .address      (address[11:0]),
-  .data_in      (ram_data_in),
+  .data_in      (data_in),
   .data_out     (ram_data_out),
   .write_enable (ram_write_enable),
   .clk          (clk),
@@ -112,7 +66,7 @@ ram ram_0(
 
 peripherals peripherals_0(
   .address      (address[5:0]),
-  .data_in      (peripherals_data_in),
+  .data_in      (data_in),
   .data_out     (peripherals_data_out),
   .write_enable (peripherals_write_enable),
   .clk          (clk),
@@ -126,7 +80,7 @@ peripherals peripherals_0(
 
 ram ram_1(
   .address      (address[11:0]),
-  .data_in      (block_ram_data_in),
+  .data_in      (data_in),
   .data_out     (block_ram_data_out),
   .write_enable (block_ram_write_enable),
   .clk          (clk),
