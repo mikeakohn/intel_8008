@@ -3,7 +3,6 @@ PROGRAM=i8008
 SOURCE= \
   src/$(PROGRAM).v \
   src/alu.v \
-  src/block_ram.v \
   src/eeprom.v \
   src/memory_bus.v \
   src/peripherals.v \
